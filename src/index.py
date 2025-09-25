@@ -2,6 +2,14 @@ import os
 import logging
 from typing import Optional
 import logging
+from typing import List, Optional, Union
+from pathlib import Path
+
+from docling.document_converter import DocumentConverter
+from docling_core.transforms.chunker.hybrid_chunker import HybridChunker
+from langchain_core.documents import Document
+from langchain_docling.loader import DoclingLoader
+from langchain_docling.loader import ExportType
 
 
 class RAGMultiModal:
@@ -91,6 +99,50 @@ class RAGMultiModal:
             logging.Logger: The configured logger object.
         """
         return self.logger
+
+    def process_file(self, file_path, converter, chunker, namespace):
+        """
+        Process a single file and prepare documents for indexing.
+
+        Args:
+            file_path: Path to the file to process
+            converter: Document converter to use
+            chunker: Document chunker to use
+            namespace: Namespace to use for the documents
+
+        Returns:
+            List[Document]: List of processed documents
+        """
+        file_path = Path(file_path) if isinstance(
+            file_path, str) else file_path
+
+        # Create document loader
+        loader = DoclingLoader(
+            file_path=str(file_path),
+            converter=converter,
+            chunker=chunker,
+            export_type=ExportType.DOC_CHUNKS
+        )
+
+        # Load and process documents
+        docs = loader.load()
+
+        # Prepare documents for indexing
+        processed_docs = []
+        for doc in docs:
+            metadata = doc.metadata
+            _metadata = dict()
+            _metadata["source"] = str(metadata["source"])
+            _metadata["page_no"] = metadata["dl_meta"]['doc_items'][0]['prov'][0]['page_no']
+            _metadata["namespace"] = namespace
+
+            processed_doc = Document(
+                page_content=doc.page_content,
+                metadata=_metadata
+            )
+            processed_docs.append(processed_doc)
+
+        return processed_docs
 
 
 # --- Example of how to use the class ---

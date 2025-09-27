@@ -10,7 +10,7 @@ dependencies = [
     "ipywidgets>=8.1.7",
     "langchain>=0.3.27",
     "langchain-docling>=1.1.0",
-    "pymilvus>=2.6.2",
+    "pymilvus[model]>=2.6.2",
     "pytest>=8.4.2",
     "pyyaml>=6.0.2",
 ]

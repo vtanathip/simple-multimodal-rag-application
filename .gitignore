@@ -1,5 +1,7 @@
 # Custom
 notebooks/documents/*
+documents/*
+output/*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

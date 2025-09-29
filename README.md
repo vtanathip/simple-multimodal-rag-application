@@ -130,7 +130,10 @@ for result in search_results:
 
 ```bash
 # Run the complete pipeline
-python main.py
+python sample.py
+
+# Run the milvus integration
+python milvus_integration.py
 ```
 
 The application will:
@@ -614,7 +617,8 @@ simple-multimodal-rag-application/
 ├── 📂 docs/                             # Documentation
 │   └── MILVUS_INTEGRATION.md            # Database integration guide
 ├── 📄 config.yaml                       # Main configuration file
-├── 📄 main.py                           # Application entry point
+├── 📄 sample.py                         # Application entry point
+├── 📄 milvus_integration.py             # Application entry point
 ├── 📄 pyproject.toml                    # Project dependencies
 ├── 📄 uv.lock                           # Dependency lock file
 └── 📄 README.md                         # This documentation

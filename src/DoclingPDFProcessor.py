@@ -34,7 +34,7 @@ class DoclingPDFProcessor:
     Supports batch processing and configurable pipeline options
     """
 
-    def __init__(self, config_path: str = "config.yaml", use_database: bool = True):
+    def __init__(self, config_path: str = "config.yaml", use_database: bool = False):
         """
         Initialize the PDF processor with configuration
 

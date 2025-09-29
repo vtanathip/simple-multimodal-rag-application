@@ -9,7 +9,7 @@ from dataclasses import dataclass
 import uuid
 
 import yaml
-from pymilvus import MilvusClient, model
+from pymilvus import MilvusClient, model, DataType, FieldSchema, CollectionSchema
 from pymilvus.exceptions import MilvusException
 
 
@@ -120,7 +120,7 @@ class MilvusManager:
 
     def create_collection(self, collection_name: Optional[str] = None, drop_existing: bool = False) -> bool:
         """
-        Create a new collection in Milvus
+        Create a new collection in Milvus with explicit schema for string IDs
 
         Args:
             collection_name: Name of the collection to create
@@ -144,16 +144,39 @@ class MilvusManager:
                         f"Collection {collection_name} already exists")
                     return True
 
-            # Create collection
+            # Define schema with string ID field
+            fields = [
+                FieldSchema(name="id", dtype=DataType.VARCHAR,
+                            is_primary=True, max_length=100),
+                FieldSchema(name="vector", dtype=DataType.FLOAT_VECTOR,
+                            dim=self.vector_dimension),
+                FieldSchema(name="text", dtype=DataType.VARCHAR,
+                            max_length=65535),
+                FieldSchema(name="file_path",
+                            dtype=DataType.VARCHAR, max_length=1000),
+                FieldSchema(name="page_number", dtype=DataType.INT64),
+                FieldSchema(name="chunk_index", dtype=DataType.INT64)
+            ]
+
+            schema = CollectionSchema(
+                fields=fields,
+                description="RAG collection with string IDs",
+                enable_dynamic_field=True
+            )
+
+            # Create collection with explicit schema
             self.client.create_collection(
                 collection_name=collection_name,
-                dimension=self.vector_dimension,
+                schema=schema,
                 metric_type="COSINE",  # Use cosine similarity
                 consistency_level="Strong"
             )
 
             self.logger.info(
-                f"Collection {collection_name} created successfully")
+                f"Collection {collection_name} created successfully with string ID schema")
+
+            # Create index on vector field
+            self.create_index(collection_name)
             return True
 
         except MilvusException as e:
@@ -161,6 +184,44 @@ class MilvusManager:
             return False
         except Exception as e:
             self.logger.error(f"Error creating collection: {e}")
+            return False
+
+    def create_index(self, collection_name: Optional[str] = None) -> bool:
+        """
+        Create an index on the vector field for the collection
+
+        Args:
+            collection_name: Name of the collection to create index for
+
+        Returns:
+            bool: True if index creation successful
+        """
+        collection_name = collection_name or self.collection_name
+
+        try:
+            # Use the MilvusClient's prepare_index_params method for proper format
+            index_params = self.client.prepare_index_params()
+            index_params.add_index(
+                field_name="vector",
+                index_type="FLAT",  # Simple flat index for small datasets
+                metric_type="COSINE"
+            )
+
+            # Create index on vector field
+            self.client.create_index(
+                collection_name=collection_name,
+                index_params=index_params
+            )
+
+            self.logger.info(
+                f"Index created successfully for collection {collection_name}")
+            return True
+
+        except MilvusException as e:
+            self.logger.error(f"Milvus error creating index: {e}")
+            return False
+        except Exception as e:
+            self.logger.error(f"Error creating index: {e}")
             return False
 
     def insert_documents(self, documents: List[VectorDocument], collection_name: Optional[str] = None) -> bool:
@@ -261,6 +322,38 @@ class MilvusManager:
             self.logger.error(f"Error inserting text documents: {e}")
             return False
 
+    def load_collection(self, collection_name: Optional[str] = None) -> bool:
+        """
+        Load a collection into memory for searching
+
+        Args:
+            collection_name: Name of the collection to load
+
+        Returns:
+            bool: True if loading successful
+        """
+        collection_name = collection_name or self.collection_name
+
+        try:
+            # Check if collection exists first
+            if not self.client.has_collection(collection_name=collection_name):
+                self.logger.error(
+                    f"Collection {collection_name} does not exist")
+                return False
+
+            # Load the collection
+            self.client.load_collection(collection_name=collection_name)
+            self.logger.info(
+                f"Collection {collection_name} loaded successfully")
+            return True
+
+        except MilvusException as e:
+            self.logger.error(f"Milvus error loading collection: {e}")
+            return False
+        except Exception as e:
+            self.logger.error(f"Error loading collection: {e}")
+            return False
+
     def search(self, query: str, limit: int = 10, collection_name: Optional[str] = None) -> List[SearchResult]:
         """
         Search for similar documents using text query
@@ -276,6 +369,9 @@ class MilvusManager:
         collection_name = collection_name or self.collection_name
 
         try:
+            # Ensure collection is loaded
+            self.load_collection(collection_name)
+
             # Generate query vector
             query_vector = self.embedding_fn.encode_queries([query])[0]
 

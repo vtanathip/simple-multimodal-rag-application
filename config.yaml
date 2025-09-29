@@ -6,6 +6,13 @@ model:
   embeddings: "text-embedding-3-small"  # OpenAI model for embeddings
   tokenizer: "sentence-transformers/all-MiniLM-L6-v2"  # Hugging Face model for tokenization
 
+# Agent Configuration
+agent:
+  ollama_base_url: "http://localhost:11434"  # Ollama API endpoint
+  temperature: 0.1  # LLM temperature for response generation
+  max_retries: 3  # Maximum retries for failed operations
+  timeout: 30  # Timeout in seconds for LLM calls
+
 # Docling Document Processing
 document:
   image_resolution_scale: 2  # Scale factor for image resolution in document processing

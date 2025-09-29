@@ -1,8 +1,17 @@
 # Simple Multimodal RAG Application
 
-A comprehensive multimodal RAG (Retrieval-Augmented Generation) application that processes PDF documents, extracts text and images, stores them in a vector database, and enables intelligent document search and retrieval.
+A comprehensive multimodal RAG (Retrieval-Augmented Generation) application that processes PDF documents, extracts text and images, stores them in a vector database, and enables intelligent document search and retrieval. Now featuring a **LangGraph agent with Ollama integration** for advanced conversational AI capabilities!
 
 ## 🚀 Features
+
+### 🤖 LangGraph Agent (NEW!)
+
+- **Ollama Integration**: Local LLM inference using Ollama models
+- **Structured Workflows**: LangGraph-based agent with clear processing steps
+- **Interactive CLI**: Command-line interface for easy interaction
+- **Async Support**: Both synchronous and asynchronous query processing
+- **Smart Routing**: Automatic detection of document processing vs. search queries
+- **Error Recovery**: Robust error handling with retry mechanisms
 
 ### 📄 PDF Processing with Docling
 
@@ -63,7 +72,36 @@ standalone.bat start
 
 Access Milvus Web UI: <http://localhost:9091/webui/>
 
-### 2. Basic PDF Processing
+### 2. Setup Ollama (For LangGraph Agent)
+
+Install and start Ollama for local LLM inference:
+
+```bash
+# Install Ollama from https://ollama.ai
+# Pull the model (e.g., llama3.2)
+ollama pull llama3.2
+
+# Start Ollama server
+ollama serve
+```
+
+### 3. Quick Start with LangGraph Agent
+
+```bash
+# Interactive mode
+python main.py
+
+# Single query
+python main.py --query "What documents do you have?"
+
+# Add a document
+python main.py --add-document "notebooks/documents/USU-Student-Cookbook-FINAL-1.pdf"
+
+# Show statistics
+python main.py --stats
+```
+
+### 4. Basic PDF Processing
 
 ```python
 from src.DoclingPDFProcessor import DoclingPDFProcessor
@@ -200,6 +238,58 @@ retrieval:
 - **`text_generation`**: Model for text generation (supports Ollama models)
 - **`embeddings`**: Embedding model for vector creation
 - **`tokenizer`**: Tokenization model for text processing
+
+## 🤖 LangGraph Agent API
+
+### Programmatic Usage
+
+```python
+from src.agent import MultimodalRAGAgent
+import asyncio
+
+# Initialize agent
+agent = MultimodalRAGAgent()
+
+# Add a document to knowledge base
+result = agent.add_document("documents/report.pdf")
+print(f"Success: {result['success']}")
+
+# Query the knowledge base
+response = agent.process_query_sync("What are the key findings?")
+print(f"Answer: {response.answer}")
+print(f"Sources: {len(response.sources)}")
+
+# Async usage for better performance
+async def query_async():
+    response = await agent.process_query("Summarize the main conclusions")
+    return response.answer
+
+answer = asyncio.run(query_async())
+```
+
+### Agent Workflow
+
+The LangGraph agent follows this workflow:
+
+1. **Query Analysis**: Determines if document processing or search is needed
+2. **Document Processing**: Uses DoclingPDFProcessor to add new documents
+3. **Knowledge Search**: Searches Milvus vector database for relevant content  
+4. **Response Generation**: Uses Ollama LLM to generate contextual responses
+
+### Customization
+
+```python
+# Custom configuration
+agent = MultimodalRAGAgent(
+    config_path="custom_config.yaml",
+    model_name="llama2",  # Different Ollama model
+    ollama_base_url="http://custom-host:11434"
+)
+
+# Get collection statistics
+stats = agent.get_collection_stats()
+print(f"Documents: {stats.get('total_documents', 0)}")
+```
 
 ## 💡 Feature Examples
 

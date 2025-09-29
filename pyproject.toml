@@ -11,10 +11,15 @@ dependencies = [
     "ipywidgets>=8.1.7",
     "langchain>=0.3.27",
     "langchain-docling>=1.1.0",
+    "langchain-ollama>=0.2.1",
+    "langgraph>=0.2.69",
+    "langgraph-checkpoint>=2.0.6",
     "pymilvus[milvus-lite,model]>=2.6.2",
     "pytest>=8.4.2",
+    "pytest-asyncio>=0.24.0",
     "pyyaml>=6.0.2",
     "transformers>=4.56.1",
+    "httpx>=0.28.1",
 ]
 [tool.pytest.ini_options]
 pythonpath = [

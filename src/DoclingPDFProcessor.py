@@ -14,6 +14,8 @@ from docling.document_converter import DocumentConverter, PdfFormatOption
 from docling.datamodel.base_models import InputFormat
 from docling.datamodel.pipeline_options import PdfPipelineOptions
 
+from .MilvusManager import MilvusManager, VectorDocument
+
 
 @dataclass
 class ProcessingResult:
@@ -32,16 +34,20 @@ class DoclingPDFProcessor:
     Supports batch processing and configurable pipeline options
     """
 
-    def __init__(self, config_path: str = "config.yaml"):
+    def __init__(self, config_path: str = "config.yaml", use_database: bool = True):
         """
         Initialize the PDF processor with configuration
 
         Args:
             config_path: Path to the configuration YAML file
+            use_database: Whether to initialize database connection
         """
+        self._config_path = config_path  # Store config path for database manager
         self.logger = self._setup_logging()
         self.config = self._load_config(config_path)
         self.converter = self._setup_converter()
+        self.use_database = use_database
+        self.milvus_manager = self._setup_database() if use_database else None
 
     def _setup_logging(self) -> logging.Logger:
         """Setup logging configuration"""
@@ -91,6 +97,31 @@ class DoclingPDFProcessor:
             # Fallback to basic converter
             return DocumentConverter()
 
+    def _setup_database(self) -> Optional[MilvusManager]:
+        """Setup Milvus database manager"""
+        try:
+            # Use the same config path that was used to initialize this processor
+            config_path = getattr(self, '_config_path', 'config.yaml')
+            milvus_manager = MilvusManager(config_path=config_path)
+
+            # Create collection if it doesn't exist
+            db_config = self.config.get("database", {})
+            collection_name = db_config.get(
+                "collection_name", "rag_collection")
+
+            if not milvus_manager.create_collection(collection_name):
+                self.logger.warning(
+                    "Failed to create/verify collection, database operations may fail")
+
+            self.logger.info(
+                "Milvus database manager initialized successfully")
+            return milvus_manager
+
+        except Exception as e:
+            self.logger.error(f"Error setting up database manager: {e}")
+            self.logger.warning("Continuing without database functionality")
+            return None
+
     def process_single_pdf(self, file_path: str) -> ProcessingResult:
         """
         Process a single PDF file
@@ -133,6 +164,14 @@ class DoclingPDFProcessor:
 
             self.logger.info(
                 f"Successfully processed {file_path} in {processing_time:.2f}s")
+
+            # Save to database if enabled
+            if self.use_database and self.milvus_manager:
+                try:
+                    self._save_to_database(
+                        file_path, markdown_content, document)
+                except Exception as e:
+                    self.logger.warning(f"Failed to save to database: {e}")
 
             return ProcessingResult(
                 success=True,
@@ -255,6 +294,188 @@ class DoclingPDFProcessor:
             self.logger.error(f"Error extracting document info: {e}")
             return {}
 
+    def _save_to_database(self, file_path: str, markdown_content: str, document: Any) -> bool:
+        """
+        Save processed document content to Milvus database
+
+        Args:
+            file_path: Path to the source PDF file
+            markdown_content: Processed markdown content
+            document: Docling document object
+
+        Returns:
+            bool: True if saved successfully
+        """
+        if not self.milvus_manager or not markdown_content:
+            return False
+
+        try:
+            # Get chunking configuration
+            doc_config = self.config.get("document", {})
+            max_tokens = doc_config.get("max_tokens", 512)
+
+            # Chunk the markdown content
+            chunks = self._chunk_text(markdown_content, max_tokens)
+
+            # Prepare metadata
+            file_name = Path(file_path).name
+            page_count = len(document.pages) if hasattr(
+                document, 'pages') else 0
+
+            # Create text documents for each chunk
+            texts = []
+            metadata_list = []
+            file_paths = []
+
+            for i, chunk in enumerate(chunks):
+                if chunk.strip():  # Skip empty chunks
+                    texts.append(chunk)
+                    metadata_list.append({
+                        "source_file": file_name,
+                        "page_count": page_count,
+                        "chunk_index": i,
+                        "total_chunks": len(chunks)
+                    })
+                    file_paths.append(file_path)
+
+            # Insert into database
+            if texts:
+                success = self.milvus_manager.insert_text_documents(
+                    texts=texts,
+                    metadata_list=metadata_list,
+                    file_paths=file_paths
+                )
+
+                if success:
+                    self.logger.info(
+                        f"Successfully saved {len(texts)} chunks from {file_name} to database")
+                    return True
+                else:
+                    self.logger.error(
+                        f"Failed to save chunks from {file_name} to database")
+                    return False
+
+            return True
+
+        except Exception as e:
+            self.logger.error(f"Error saving to database: {e}")
+            return False
+
+    def _chunk_text(self, text: str, max_tokens: int = 512) -> List[str]:
+        """
+        Chunk text into smaller segments based on token count
+
+        Args:
+            text: Text to chunk
+            max_tokens: Maximum tokens per chunk
+
+        Returns:
+            List of text chunks
+        """
+        try:
+            # Simple chunking by sentences and approximate token count
+            # Each word is roughly 1-2 tokens, so we'll use words as approximation
+            words_per_chunk = max_tokens // 2  # Conservative estimate
+
+            # Split by paragraphs first
+            paragraphs = text.split('\n\n')
+            chunks = []
+            current_chunk = []
+            current_word_count = 0
+
+            for paragraph in paragraphs:
+                words = paragraph.split()
+
+                # If adding this paragraph would exceed limit, start new chunk
+                if current_word_count + len(words) > words_per_chunk and current_chunk:
+                    chunks.append(' '.join(current_chunk))
+                    current_chunk = []
+                    current_word_count = 0
+
+                # If single paragraph is too long, split it
+                if len(words) > words_per_chunk:
+                    # Add current chunk if it exists
+                    if current_chunk:
+                        chunks.append(' '.join(current_chunk))
+                        current_chunk = []
+                        current_word_count = 0
+
+                    # Split long paragraph into smaller chunks
+                    for i in range(0, len(words), words_per_chunk):
+                        chunk_words = words[i:i + words_per_chunk]
+                        chunks.append(' '.join(chunk_words))
+                else:
+                    current_chunk.extend(words)
+                    current_word_count += len(words)
+
+            # Add final chunk
+            if current_chunk:
+                chunks.append(' '.join(current_chunk))
+
+            return [chunk for chunk in chunks if chunk.strip()]
+
+        except Exception as e:
+            self.logger.error(f"Error chunking text: {e}")
+            return [text]  # Return original text as single chunk
+
+    def search_documents(self, query: str, limit: int = 10) -> List[Dict[str, Any]]:
+        """
+        Search for similar documents in the database
+
+        Args:
+            query: Search query
+            limit: Maximum number of results
+
+        Returns:
+            List of search results
+        """
+        if not self.milvus_manager:
+            self.logger.warning("Database not initialized, cannot search")
+            return []
+
+        try:
+            results = self.milvus_manager.search(query, limit)
+
+            # Convert SearchResult objects to dictionaries
+            search_results = []
+            for result in results:
+                search_results.append({
+                    "id": result.id,
+                    "text": result.text,
+                    "score": result.score,
+                    "file_path": result.file_path,
+                    "page_number": result.page_number,
+                    "metadata": result.metadata
+                })
+
+            return search_results
+
+        except Exception as e:
+            self.logger.error(f"Error searching documents: {e}")
+            return []
+
+    def get_database_stats(self) -> Dict[str, Any]:
+        """
+        Get database statistics
+
+        Returns:
+            Dictionary with database statistics
+        """
+        if not self.milvus_manager:
+            return {"error": "Database not initialized"}
+
+        try:
+            return self.milvus_manager.get_collection_stats()
+        except Exception as e:
+            self.logger.error(f"Error getting database stats: {e}")
+            return {"error": str(e)}
+
+    def close_database(self):
+        """Close database connection"""
+        if self.milvus_manager:
+            self.milvus_manager.close()
+            self.logger.info("Database connection closed")
+
 
 def main():
     """
@@ -269,11 +490,20 @@ def main():
     print(f"Starting PDF processing pipeline...")
     print(f"Processing directory: {doc_dir}")
 
+    if processor.use_database:
+        print("Database integration enabled")
+        db_stats = processor.get_database_stats()
+        if "error" not in db_stats:
+            print(
+                f"Database collection: {db_stats.get('collection_name', 'N/A')}")
+
     # Process all PDFs in the directory
     results = processor.process_directory(doc_dir)
 
     if not results:
         print("No PDF files found or processed.")
+        if processor.use_database:
+            processor.close_database()
         return
 
     # Save results
@@ -306,6 +536,16 @@ def main():
             print(f"  • {Path(result.file_path).name}: {result.error_message}")
 
     print("\nMarkdown files saved to 'output' directory")
+
+    if processor.use_database:
+        print("\nDatabase Summary:")
+        final_stats = processor.get_database_stats()
+        if "error" not in final_stats:
+            print(f"  Collection: {final_stats.get('collection_name', 'N/A')}")
+            print("  Documents successfully indexed for vector search")
+
+        # Cleanup
+        processor.close_database()
 
 
 if __name__ == "__main__":

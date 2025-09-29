@@ -19,7 +19,7 @@ document:
 database:
   uri: "http://localhost:19530"  # Milvus database URI
   name: "rag_multimodal"  # Database name
-  collection_name: "collection_demo"  # Collection name
+  collection_name: "rag_collection"  # Collection name for processed documents
   namespace: "CaseDoneDemo"  # Namespace for partitioning data
 
 # Retrieval Configuration

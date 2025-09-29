@@ -3,6 +3,11 @@ notebooks/documents/*
 documents/*
 output/*
 
+# Milvus data
+embedEtcd.yaml
+user.yaml
+volumes/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]

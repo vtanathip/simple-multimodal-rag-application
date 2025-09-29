@@ -8,11 +8,13 @@ This test suite covers:
 - Directory and file processing
 - Processing result handling
 - Configuration loading and fallbacks
+- Database integration features
 
 Run with: pytest test/test_processor.py -v
 """
 
 import pytest
+from unittest.mock import Mock, patch
 from docling.document_converter import DocumentConverter
 from src.DoclingPDFProcessor import DoclingPDFProcessor
 
@@ -22,32 +24,39 @@ class TestDoclingPDFProcessor:
 
     def test_processor_initialization(self):
         """Test that the processor can be initialized"""
-        processor = DoclingPDFProcessor()
-        assert processor is not None
-        assert hasattr(processor, 'config')
-        assert hasattr(processor, 'converter')
-        assert hasattr(processor, 'logger')
+        with patch('src.DoclingPDFProcessor.MilvusManager'):
+            processor = DoclingPDFProcessor()
+            assert processor is not None
+            assert hasattr(processor, 'config')
+            assert hasattr(processor, 'converter')
+            assert hasattr(processor, 'logger')
+            assert hasattr(processor, 'use_database')
+            assert hasattr(processor, 'milvus_manager')
 
     def test_config_loading(self):
         """Test configuration loading"""
-        processor = DoclingPDFProcessor()
-        assert processor.config is not None
-        assert isinstance(processor.config, dict)
+        with patch('src.DoclingPDFProcessor.MilvusManager'):
+            processor = DoclingPDFProcessor()
+            assert processor.config is not None
+            assert isinstance(processor.config, dict)
 
-        # Test that document config exists
-        doc_config = processor.config.get("document", {})
-        assert doc_config is not None
-        assert isinstance(doc_config, dict)
+            # Test that document config exists
+            doc_config = processor.config.get("document", {})
+            assert doc_config is not None
+            assert isinstance(doc_config, dict)
 
     def test_converter_setup(self):
         """Test converter setup"""
-        processor = DoclingPDFProcessor()
-        assert processor.converter is not None
-        assert isinstance(processor.converter, DocumentConverter)
+        with patch('src.DoclingPDFProcessor.MilvusManager'):
+            processor = DoclingPDFProcessor()
+            assert processor.converter is not None
+            assert isinstance(processor.converter, DocumentConverter)
 
     def test_default_config_fallback(self):
         """Test that default config is used when config file doesn't exist"""
-        processor = DoclingPDFProcessor(config_path="nonexistent_config.yaml")
+        with patch('src.DoclingPDFProcessor.MilvusManager'):
+            processor = DoclingPDFProcessor(
+                config_path="nonexistent_config.yaml")
         assert processor.config is not None
         assert "document" in processor.config
 
@@ -217,3 +226,78 @@ class TestProcessingResult:
         assert result.markdown_content is None
         assert result.document is None
         assert result.processing_time is None
+
+    def test_processor_initialization_with_database_enabled(self):
+        """Test processor initialization with database enabled"""
+        with patch('src.DoclingPDFProcessor.MilvusManager') as mock_milvus:
+            mock_milvus.return_value.create_collection.return_value = True
+
+            processor = DoclingPDFProcessor(use_database=True)
+
+            assert processor.use_database is True
+            assert processor.milvus_manager is not None
+            mock_milvus.assert_called_once()
+
+    def test_processor_initialization_with_database_disabled(self):
+        """Test processor initialization with database disabled"""
+        processor = DoclingPDFProcessor(use_database=False)
+
+        assert processor.use_database is False
+        assert processor.milvus_manager is None
+
+    def test_database_methods_without_database(self):
+        """Test database methods when database is not initialized"""
+        processor = DoclingPDFProcessor(use_database=False)
+
+        # Test search without database
+        results = processor.search_documents("test query")
+        assert results == []
+
+        # Test stats without database
+        stats = processor.get_database_stats()
+        assert "error" in stats
+
+        # Test close without database (should not raise exception)
+        processor.close_database()
+
+    @patch('src.DoclingPDFProcessor.MilvusManager')
+    def test_search_documents_with_database(self, mock_milvus_class):
+        """Test search functionality with database"""
+        from src.MilvusManager import SearchResult
+
+        mock_manager = Mock()
+        mock_manager.create_collection.return_value = True
+        mock_manager.search.return_value = [
+            SearchResult(
+                id="test_id",
+                text="Test result",
+                score=0.95,
+                file_path="/test/path.pdf",
+                page_number=1
+            )
+        ]
+        mock_milvus_class.return_value = mock_manager
+
+        processor = DoclingPDFProcessor(use_database=True)
+        results = processor.search_documents("test query", limit=5)
+
+        assert len(results) == 1
+        assert results[0]["text"] == "Test result"
+        assert results[0]["score"] == 0.95
+
+    @patch('src.DoclingPDFProcessor.MilvusManager')
+    def test_get_database_stats_with_database(self, mock_milvus_class):
+        """Test getting database stats with database initialized"""
+        mock_manager = Mock()
+        mock_manager.create_collection.return_value = True
+        mock_manager.get_collection_stats.return_value = {
+            "collection_name": "test_collection",
+            "exists": True
+        }
+        mock_milvus_class.return_value = mock_manager
+
+        processor = DoclingPDFProcessor(use_database=True)
+        stats = processor.get_database_stats()
+
+        assert "collection_name" in stats
+        assert stats["exists"] is True

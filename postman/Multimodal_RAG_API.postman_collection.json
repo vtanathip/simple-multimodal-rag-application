@@ -1,0 +1,842 @@
+{
+    "info": {
+        "name": "Multimodal RAG API Collection",
+        "description": "Complete test collection for the LangGraph-based Multimodal RAG API",
+        "version": "1.0.0",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "variable": [
+        {
+            "key": "base_url",
+            "value": "http://localhost:8000",
+            "type": "string"
+        },
+        {
+            "key": "thread_id",
+            "value": "test_session_{{$randomUUID}}",
+            "type": "string"
+        },
+        {
+            "key": "api_version",
+            "value": "1.0.0",
+            "type": "string"
+        }
+    ],
+    "auth": {
+        "type": "noauth"
+    },
+    "item": [
+        {
+            "name": "Health & Status",
+            "item": [
+                {
+                    "name": "Root Endpoint",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('Status code is 200', function () {",
+                                    "    pm.response.to.have.status(200);",
+                                    "});",
+                                    "",
+                                    "pm.test('Response has correct structure', function () {",
+                                    "    const jsonData = pm.response.json();",
+                                    "    pm.expect(jsonData).to.have.property('message');",
+                                    "    pm.expect(jsonData).to.have.property('version');",
+                                    "    pm.expect(jsonData).to.have.property('docs');",
+                                    "});",
+                                    "",
+                                    "pm.test('Message is correct', function () {",
+                                    "    const jsonData = pm.response.json();",
+                                    "    pm.expect(jsonData.message).to.eql('Multimodal RAG API');",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                ""
+                            ]
+                        },
+                        "description": "Test the root endpoint to verify API is running"
+                    }
+                },
+                {
+                    "name": "Health Check",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('Status code is 200', function () {",
+                                    "    pm.response.to.have.status(200);",
+                                    "});",
+                                    "",
+                                    "pm.test('Health response structure is correct', function () {",
+                                    "    const jsonData = pm.response.json();",
+                                    "    pm.expect(jsonData).to.have.property('status');",
+                                    "    pm.expect(jsonData).to.have.property('version');",
+                                    "    pm.expect(jsonData).to.have.property('components');",
+                                    "});",
+                                    "",
+                                    "pm.test('Components include required services', function () {",
+                                    "    const jsonData = pm.response.json();",
+                                    "    pm.expect(jsonData.components).to.have.property('agent');",
+                                    "    pm.expect(jsonData.components).to.have.property('api');",
+                                    "});",
+                                    "",
+                                    "// Store health status for other tests",
+                                    "pm.globals.set('api_healthy', pm.response.json().status === 'healthy');"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/health",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "health"
+                            ]
+                        },
+                        "description": "Check the health status of the API and its components"
+                    }
+                }
+            ],
+            "description": "Basic health and status endpoints"
+        },
+        {
+            "name": "Query Processing",
+            "item": [
+                {
+                    "name": "Simple Query",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('Status code is 200 or 503', function () {",
+                                    "    pm.expect(pm.response.code).to.be.oneOf([200, 503]);",
+                                    "});",
+                                    "",
+                                    "if (pm.response.code === 200) {",
+                                    "    pm.test('Query response structure is correct', function () {",
+                                    "        const jsonData = pm.response.json();",
+                                    "        pm.expect(jsonData).to.have.property('answer');",
+                                    "        pm.expect(jsonData).to.have.property('sources');",
+                                    "        pm.expect(jsonData.sources).to.be.an('array');",
+                                    "    });",
+                                    "    ",
+                                    "    pm.test('Answer is not empty', function () {",
+                                    "        const jsonData = pm.response.json();",
+                                    "        pm.expect(jsonData.answer).to.be.a('string');",
+                                    "        pm.expect(jsonData.answer.length).to.be.greaterThan(0);",
+                                    "    });",
+                                    "} else if (pm.response.code === 503) {",
+                                    "    pm.test('Service unavailable message is correct', function () {",
+                                    "        const jsonData = pm.response.json();",
+                                    "        pm.expect(jsonData.detail).to.include('Agent not initialized');",
+                                    "    });",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"query\": \"What is machine learning?\",\n  \"thread_id\": \"{{thread_id}}\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/query",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "query"
+                            ]
+                        },
+                        "description": "Test a simple query about machine learning"
+                    }
+                },
+                {
+                    "name": "Complex Query",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('Status code is 200 or 503', function () {",
+                                    "    pm.expect(pm.response.code).to.be.oneOf([200, 503]);",
+                                    "});",
+                                    "",
+                                    "if (pm.response.code === 200) {",
+                                    "    pm.test('Response includes processing info', function () {",
+                                    "        const jsonData = pm.response.json();",
+                                    "        pm.expect(jsonData).to.have.property('processing_info');",
+                                    "    });",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"query\": \"Can you explain the differences between supervised, unsupervised, and reinforcement learning? Please provide examples of each and discuss their applications in real-world scenarios.\",\n  \"thread_id\": \"{{thread_id}}\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/query",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "query"
+                            ]
+                        },
+                        "description": "Test a complex, multi-part query"
+                    }
+                },
+                {
+                    "name": "Query with Default Thread",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('Status code is 200 or 503', function () {",
+                                    "    pm.expect(pm.response.code).to.be.oneOf([200, 503]);",
+                                    "});",
+                                    "",
+                                    "if (pm.response.code === 200) {",
+                                    "    pm.test('Default thread_id is handled', function () {",
+                                    "        // Should not error when thread_id is not provided",
+                                    "        pm.response.to.be.ok;",
+                                    "    });",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"query\": \"What is artificial intelligence?\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/query",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "query"
+                            ]
+                        },
+                        "description": "Test query without explicit thread_id (should use default)"
+                    }
+                },
+                {
+                    "name": "Invalid Query Request",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('Status code is 422 (Validation Error)', function () {",
+                                    "    pm.response.to.have.status(422);",
+                                    "});",
+                                    "",
+                                    "pm.test('Error details are present', function () {",
+                                    "    const jsonData = pm.response.json();",
+                                    "    pm.expect(jsonData).to.have.property('detail');",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"invalid_field\": \"this should fail validation\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/query",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "query"
+                            ]
+                        },
+                        "description": "Test invalid request to verify validation"
+                    }
+                }
+            ],
+            "description": "Test query processing endpoints"
+        },
+        {
+            "name": "Document Management",
+            "item": [
+                {
+                    "name": "Upload Document",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('Status code is 200, 400, or 503', function () {",
+                                    "    pm.expect(pm.response.code).to.be.oneOf([200, 400, 503]);",
+                                    "});",
+                                    "",
+                                    "if (pm.response.code === 200) {",
+                                    "    pm.test('Upload response structure is correct', function () {",
+                                    "        const jsonData = pm.response.json();",
+                                    "        pm.expect(jsonData).to.have.property('success');",
+                                    "        pm.expect(jsonData).to.have.property('file_path');",
+                                    "        pm.expect(jsonData).to.have.property('message');",
+                                    "    });",
+                                    "    ",
+                                    "    // Store file path for later use",
+                                    "    pm.globals.set('uploaded_file_path', pm.response.json().file_path);",
+                                    "} else if (pm.response.code === 400) {",
+                                    "    pm.test('Invalid file type error is correct', function () {",
+                                    "        const jsonData = pm.response.json();",
+                                    "        pm.expect(jsonData.detail).to.include('PDF');",
+                                    "    });",
+                                    "} else if (pm.response.code === 503) {",
+                                    "    pm.test('Service unavailable message is correct', function () {",
+                                    "        const jsonData = pm.response.json();",
+                                    "        pm.expect(jsonData.detail).to.include('Agent not initialized');",
+                                    "    });",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "formdata",
+                            "formdata": [
+                                {
+                                    "key": "file",
+                                    "type": "file",
+                                    "src": [],
+                                    "description": "Select a PDF file to upload"
+                                },
+                                {
+                                    "key": "process_immediately",
+                                    "value": "true",
+                                    "type": "text"
+                                }
+                            ]
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/upload",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "upload"
+                            ]
+                        },
+                        "description": "Upload a PDF document for processing. Note: You need to select a PDF file in the form data."
+                    }
+                },
+                {
+                    "name": "Upload Invalid File Type",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('Status code is 400 or 503', function () {",
+                                    "    pm.expect(pm.response.code).to.be.oneOf([400, 503]);",
+                                    "});",
+                                    "",
+                                    "if (pm.response.code === 400) {",
+                                    "    pm.test('Error message mentions PDF requirement', function () {",
+                                    "        const jsonData = pm.response.json();",
+                                    "        pm.expect(jsonData.detail).to.include('PDF');",
+                                    "    });",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "formdata",
+                            "formdata": [
+                                {
+                                    "key": "file",
+                                    "type": "file",
+                                    "src": [],
+                                    "description": "Select a non-PDF file (like .txt or .docx) to test validation"
+                                },
+                                {
+                                    "key": "process_immediately",
+                                    "value": "true",
+                                    "type": "text"
+                                }
+                            ]
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/upload",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "upload"
+                            ]
+                        },
+                        "description": "Test uploading an invalid file type to verify validation"
+                    }
+                },
+                {
+                    "name": "Upload with Background Processing",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('Status code is 200 or 503', function () {",
+                                    "    pm.expect(pm.response.code).to.be.oneOf([200, 503]);",
+                                    "});",
+                                    "",
+                                    "if (pm.response.code === 200) {",
+                                    "    pm.test('Background processing message is correct', function () {",
+                                    "        const jsonData = pm.response.json();",
+                                    "        pm.expect(jsonData.message).to.include('background');",
+                                    "    });",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "formdata",
+                            "formdata": [
+                                {
+                                    "key": "file",
+                                    "type": "file",
+                                    "src": [],
+                                    "description": "Select a PDF file for background processing"
+                                },
+                                {
+                                    "key": "process_immediately",
+                                    "value": "false",
+                                    "type": "text"
+                                }
+                            ]
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/upload",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "upload"
+                            ]
+                        },
+                        "description": "Upload a document for background processing"
+                    }
+                },
+                {
+                    "name": "Process Existing Document",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('Status code is 200, 404, or 503', function () {",
+                                    "    pm.expect(pm.response.code).to.be.oneOf([200, 404, 503]);",
+                                    "});",
+                                    "",
+                                    "if (pm.response.code === 200) {",
+                                    "    pm.test('Processing response structure is correct', function () {",
+                                    "        const jsonData = pm.response.json();",
+                                    "        pm.expect(jsonData).to.have.property('success');",
+                                    "        pm.expect(jsonData).to.have.property('file_path');",
+                                    "        pm.expect(jsonData).to.have.property('message');",
+                                    "    });",
+                                    "} else if (pm.response.code === 404) {",
+                                    "    pm.test('File not found error is correct', function () {",
+                                    "        const jsonData = pm.response.json();",
+                                    "        pm.expect(jsonData.detail).to.include('File not found');",
+                                    "    });",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/x-www-form-urlencoded"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "urlencoded",
+                            "urlencoded": [
+                                {
+                                    "key": "file_path",
+                                    "value": "documents/cookbook.pdf",
+                                    "description": "Path to existing document"
+                                }
+                            ]
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/process-document",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "process-document"
+                            ]
+                        },
+                        "description": "Process an existing document by file path"
+                    }
+                },
+                {
+                    "name": "Process Non-Existent Document",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('Status code is 404 or 503', function () {",
+                                    "    pm.expect(pm.response.code).to.be.oneOf([404, 503]);",
+                                    "});",
+                                    "",
+                                    "if (pm.response.code === 404) {",
+                                    "    pm.test('File not found error is correct', function () {",
+                                    "        const jsonData = pm.response.json();",
+                                    "        pm.expect(jsonData.detail).to.include('File not found');",
+                                    "    });",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/x-www-form-urlencoded"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "urlencoded",
+                            "urlencoded": [
+                                {
+                                    "key": "file_path",
+                                    "value": "non_existent_file.pdf",
+                                    "description": "Path to non-existent document"
+                                }
+                            ]
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/process-document",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "process-document"
+                            ]
+                        },
+                        "description": "Test processing a non-existent document to verify error handling"
+                    }
+                }
+            ],
+            "description": "Document upload and processing endpoints"
+        },
+        {
+            "name": "Collection Management",
+            "item": [
+                {
+                    "name": "Get Collection Stats",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('Status code is 200 or 503', function () {",
+                                    "    pm.expect(pm.response.code).to.be.oneOf([200, 503]);",
+                                    "});",
+                                    "",
+                                    "if (pm.response.code === 200) {",
+                                    "    pm.test('Stats response is an object', function () {",
+                                    "        const jsonData = pm.response.json();",
+                                    "        pm.expect(jsonData).to.be.an('object');",
+                                    "    });",
+                                    "    ",
+                                    "    // Store stats for reference",
+                                    "    pm.globals.set('collection_stats', JSON.stringify(pm.response.json()));",
+                                    "} else if (pm.response.code === 503) {",
+                                    "    pm.test('Service unavailable message is correct', function () {",
+                                    "        const jsonData = pm.response.json();",
+                                    "        pm.expect(jsonData.detail).to.include('Agent not initialized');",
+                                    "    });",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/collection/stats",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "collection",
+                                "stats"
+                            ]
+                        },
+                        "description": "Get statistics about the vector collection"
+                    }
+                },
+                {
+                    "name": "Clear Collection",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('Status code is 200 or 503', function () {",
+                                    "    pm.expect(pm.response.code).to.be.oneOf([200, 503]);",
+                                    "});",
+                                    "",
+                                    "if (pm.response.code === 200) {",
+                                    "    pm.test('Clear response structure is correct', function () {",
+                                    "        const jsonData = pm.response.json();",
+                                    "        pm.expect(jsonData).to.have.property('message');",
+                                    "        pm.expect(jsonData).to.have.property('status');",
+                                    "    });",
+                                    "} else if (pm.response.code === 503) {",
+                                    "    pm.test('Service unavailable message is correct', function () {",
+                                    "        const jsonData = pm.response.json();",
+                                    "        pm.expect(jsonData.detail).to.include('Agent not initialized');",
+                                    "    });",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "DELETE",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/collection/clear",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "collection",
+                                "clear"
+                            ]
+                        },
+                        "description": "Clear all documents from the collection. WARNING: This will delete all stored documents!"
+                    }
+                }
+            ],
+            "description": "Collection management endpoints"
+        },
+        {
+            "name": "Integration Tests",
+            "item": [
+                {
+                    "name": "Full Workflow Test",
+                    "event": [
+                        {
+                            "listen": "prerequest",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "// Check if API is healthy before running integration test",
+                                    "const healthyStatus = pm.globals.get('api_healthy');",
+                                    "if (healthyStatus !== 'true' && healthyStatus !== true) {",
+                                    "    console.log('Skipping integration test - API not healthy');",
+                                    "    pm.execution.skipRequest();",
+                                    "}"
+                                ]
+                            }
+                        },
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('Integration test completes successfully', function () {",
+                                    "    pm.expect(pm.response.code).to.be.oneOf([200, 503]);",
+                                    "});",
+                                    "",
+                                    "if (pm.response.code === 200) {",
+                                    "    pm.test('Integration response includes answer', function () {",
+                                    "        const jsonData = pm.response.json();",
+                                    "        pm.expect(jsonData.answer).to.be.a('string');",
+                                    "        pm.expect(jsonData.answer.length).to.be.greaterThan(0);",
+                                    "    });",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"query\": \"Based on the documents in the knowledge base, can you provide an overview of the main topics covered?\",\n  \"thread_id\": \"integration_test_{{$randomUUID}}\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/query",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "query"
+                            ]
+                        },
+                        "description": "Test the full workflow with a query that should use existing documents"
+                    }
+                }
+            ],
+            "description": "End-to-end integration tests"
+        }
+    ]
+}

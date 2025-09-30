@@ -26,20 +26,18 @@ class TestRAGAPI:
         assert "message" in data
         assert data["message"] == "Multimodal RAG API"
 
-    @patch('api.main.agent')
-    def test_health_check_no_agent(self, mock_agent):
+    @patch('api.main.agent', None)
+    def test_health_check_no_agent(self):
         """Test health check when agent is not initialized"""
-        mock_agent = None
         response = self.client.get("/health")
         assert response.status_code == 200
         data = response.json()
         assert data["status"] in ["healthy", "degraded"]
         assert "components" in data
 
-    @patch('api.main.agent')
-    def test_query_no_agent(self, mock_agent):
+    @patch('api.main.agent', None)
+    def test_query_no_agent(self):
         """Test query endpoint when agent is not initialized"""
-        mock_agent = None
         response = self.client.post("/query", json={
             "query": "What is machine learning?",
             "thread_id": "test"
@@ -71,10 +69,9 @@ class TestRAGAPI:
         assert "sources" in data
         assert "processing_info" in data
 
-    @patch('api.main.agent')
-    def test_collection_stats_no_agent(self, mock_agent):
+    @patch('api.main.agent', None)
+    def test_collection_stats_no_agent(self):
         """Test collection stats when agent is not initialized"""
-        mock_agent = None
         response = self.client.get("/collection/stats")
         assert response.status_code == 503
         assert "Agent not initialized" in response.json()["detail"]
@@ -87,7 +84,7 @@ class TestRAGAPI:
             "collection_name": "test_collection"
         }
 
-        mock_agent.get_collection_stats = Mock(return_value=mock_stats)
+        mock_agent.get_collection_stats.return_value = mock_stats
 
         response = self.client.get("/collection/stats")
         assert response.status_code == 200
@@ -102,10 +99,9 @@ class TestRAGAPI:
         })
         assert response.status_code == 422  # Validation error
 
-    @patch('api.main.agent')
-    def test_upload_no_agent(self, mock_agent):
+    @patch('api.main.agent', None)
+    def test_upload_no_agent(self):
         """Test document upload when agent is not initialized"""
-        mock_agent = None
         response = self.client.post(
             "/upload",
             files={"file": ("test.pdf", b"fake pdf content",
@@ -115,18 +111,40 @@ class TestRAGAPI:
         assert response.status_code == 503
         assert "Agent not initialized" in response.json()["detail"]
 
-    def test_upload_invalid_file_type(self):
+    @patch('api.main.agent')
+    def test_upload_invalid_file_type(self, mock_agent):
         """Test upload with invalid file type"""
-        with patch('api.main.agent') as mock_agent:
-            mock_agent = Mock()  # Agent is initialized
+        response = self.client.post(
+            "/upload",
+            files={"file": ("test.txt", b"text content", "text/plain")},
+            data={"process_immediately": "true"}
+        )
+        assert response.status_code == 400
+        assert "Only PDF files are supported" in response.json()["detail"]
 
-            response = self.client.post(
-                "/upload",
-                files={"file": ("test.txt", b"text content", "text/plain")},
-                data={"process_immediately": "true"}
-            )
-            assert response.status_code == 400
-            assert "Only PDF files are supported" in response.json()["detail"]
+    @patch('api.main.agent')
+    def test_upload_with_agent(self, mock_agent):
+        """Test successful document upload with agent"""
+        mock_result = {
+            "success": True,
+            "processing_time": 1.5,
+            "error_message": None
+        }
+
+        mock_agent.add_document.return_value = mock_result
+
+        response = self.client.post(
+            "/upload",
+            files={"file": ("test.pdf", b"fake pdf content",
+                            "application/pdf")},
+            data={"process_immediately": "true"}
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert "test.pdf" in data["file_path"]
+        assert "uploads" in data["file_path"]
+        assert "successfully" in data["message"]
 
 
 @pytest.mark.asyncio

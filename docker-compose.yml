@@ -30,6 +30,37 @@ services:
     networks:
       - rag-network
 
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: open-webui
+    ports:
+      - "3000:8080"
+    volumes:
+      - open_webui_data:/app/backend/data
+    environment:
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - WEBUI_SECRET_KEY=your-secret-key-here
+      - OPENAI_API_BASE_URL=http://open-webui-pipeline:9099
+    depends_on:
+      - ollama
+      - open-webui-pipeline
+    networks:
+      - rag-network
+    restart: unless-stopped
+
+  open-webui-pipeline:
+    image: ghcr.io/open-webui/pipelines:main
+    container_name: open-webui-pipeline
+    ports:
+      - "9099:9099"
+    volumes:
+      - open_webui_pipeline_data:/app/pipelines
+    environment:
+      - PIPELINES_DIR=/app/pipelines
+    networks:
+      - rag-network
+    restart: unless-stopped
+
   milvus-etcd:
     container_name: milvus-etcd
     image: quay.io/coreos/etcd:v3.5.5
@@ -100,6 +131,8 @@ volumes:
   etcd_data:
   minio_data:
   milvus_data:
+  open_webui_data:
+  open_webui_pipeline_data:
 
 networks:
   rag-network:
